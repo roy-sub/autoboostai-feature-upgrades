@@ -50,7 +50,7 @@ class URLGenerator:
             while len(new_domains) < remaining_count and page < max_pages:
 
                 # Add delay between requests
-                time.sleep(15)
+                time.sleep(5)
                 
                 serp_html = self.search_client.search(search_keyword, page)
                 
