@@ -11,7 +11,7 @@ def extract_domains_from_raw_html(html: str) -> List[str]:
         'yelp', 'schema', 'w3', 'gstatic', 'ssl', 'comparis', 'local',
         'instagram', 'reddit', 'medium', 'onedoc', 'medicosearch',
         'doctena', 'inyourpocket', 'facebook', 'amazon', 'dictionary',
-        'youtube', 'tiktok', 'google'
+        'youtube', 'tiktok', 'google', 'pinterest'
     }
     
     # Parse HTML
