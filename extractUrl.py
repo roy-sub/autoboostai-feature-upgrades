@@ -1,19 +1,11 @@
 import re
-from typing import List
-from bs4 import BeautifulSoup
 from typing import List, Dict
 from urllib.parse import urlparse
+from bs4 import BeautifulSoup
+from constants import EXCLUDE_WORDS, EXCLUDE_DOMAINS
 
 def extract_domains_from_raw_html(html: str) -> List[str]:
 
-    # Words to exclude from results
-    exclude_words = {
-        'yelp', 'schema', 'w3', 'gstatic', 'ssl', 'comparis', 'local',
-        'instagram', 'reddit', 'medium', 'onedoc', 'medicosearch',
-        'doctena', 'inyourpocket', 'facebook', 'amazon', 'dictionary',
-        'youtube', 'tiktok', 'google', 'pinterest'
-    }
-    
     # Parse HTML
     soup = BeautifulSoup(html, 'html.parser')
     
@@ -32,6 +24,10 @@ def extract_domains_from_raw_html(html: str) -> List[str]:
             # Parse URL
             parsed_url = urlparse(url)
             
+            # Skip if netloc is empty or malformed
+            if not parsed_url.netloc or parsed_url.netloc == '.com':
+                continue
+                
             # Reconstruct base URL without trailing slash
             base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
             
@@ -39,11 +35,11 @@ def extract_domains_from_raw_html(html: str) -> List[str]:
             check_domain = re.sub(r'^www\.', '', parsed_url.netloc)
             
             # Skip if domain contains any excluded words
-            if any(word in check_domain.lower() for word in exclude_words):
+            if any(word in check_domain.lower() for word in EXCLUDE_WORDS):
                 continue
                 
-            # Skip Google's own domains
-            if 'google' in check_domain.lower():
+            # Skip if domain is in excluded domains list
+            if check_domain in EXCLUDE_DOMAINS:
                 continue
                 
             # Remove trailing slash if present
