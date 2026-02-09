@@ -21,7 +21,7 @@ EXCLUDE_URLS = [
     "https://www.derstandard.at/marktplatz", "https://www.job.at", "https://www.immowelt.at",
     "https://www.gebrauchtwagen.at", "https://www.urlauburlaub.at", "https://www.jobs.ch",
     "https://www.comparis.ch", "https://www.anibis.ch", "https://www.autoscout24.ch",
-    "https://www.immoscout24.ch", "https://www.tutti.ch", "https://www.hotelplan.ch"
+    "https://www.immoscout24.ch", "https://www.tutti.ch", "https://www.hotelplan.ch", "https://www.forbes.com"
 ]
 
 EXCLUDE_DOMAINS = {urlparse(url).netloc.replace('www.', '') for url in EXCLUDE_URLS}
