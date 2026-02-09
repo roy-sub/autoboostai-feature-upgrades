@@ -3,7 +3,7 @@ from typing import List, Set
 from concurrent.futures import ThreadPoolExecutor
 from dynamoDB import DomainUrlManager
 from serpApi import GoogleSearchClient
-from used_domain_fetcher import DomainFetcher
+from usedDomainFetcher import DomainFetcher
 from extractUrl import extract_domains_from_raw_html, convert_domain_list
 from config import settings
 
