@@ -1,99 +1,106 @@
-import re
-from typing import List, Set
 import time
+from typing import List, Set
+from concurrent.futures import ThreadPoolExecutor
 from dynamoDB import DomainUrlManager
 from serpApi import GoogleSearchClient
 from used_domain_fetcher import DomainFetcher
 from extractUrl import extract_domains_from_raw_html, convert_domain_list
+from config import settings
 
 class URLGenerator:
     
-    def __init__(self, 
-                 domain_fetcher: DomainFetcher = None,
-                 domain_manager: DomainUrlManager = None,
-                 search_client: GoogleSearchClient = None):
+    def __init__(self):
+        self.domain_fetcher = DomainFetcher()
+        self.domain_manager = DomainUrlManager()
+        self.search_client = GoogleSearchClient()
 
-        self.domain_fetcher = domain_fetcher or DomainFetcher()
-        self.domain_manager = domain_manager or DomainUrlManager()
-        self.search_client = search_client or GoogleSearchClient()
-        self.TARGET_URLS = 50
-        self.MAX_PAGES = 25
-
-    def generate_urls(self, user_id: str, search_keyword: str) -> List[str]:
-
+    def _fetch_used_domains(self, user_id: str) -> Set[str]:
         try:
-            # Get used domains for the user
+            return set(self.domain_fetcher.get_domain_urls(user_id))
+        except Exception:
+            return set()
+
+    def _fetch_existing_domains(self, search_keyword: str) -> Set[str]:
+        try:
+            return set(self.domain_manager.get_domain_urls(search_keyword))
+        except Exception:
+            return set()
+
+    def _fetch_serp_domains(
+        self, 
+        search_keyword: str, 
+        remaining_count: int, 
+        used_domains: Set[str], 
+        available_domains: Set[str]
+    ) -> Set[str]:
+        new_domains: Set[str] = set()
+        page = 0
+        consecutive_empty = 0
+        
+        while len(new_domains) < remaining_count and page < settings.MAX_PAGES:
+            if page > 0:
+                time.sleep(settings.SERP_DELAY)
+            
             try:
-                used_domains = set(self.domain_fetcher.get_domain_urls(user_id))
-            except Exception:
-                used_domains = set()
-            
-            # Get existing domains for the keyword from DynamoDB
-            try:
-                existing_domains = set(self.domain_manager.get_domain_urls(search_keyword))
-            except KeyError:
-                existing_domains = set()
-            
-            # Create first set: domains in database but not used by user
-            available_domains = existing_domains - used_domains
-            
-            # Calculate how many more domains we need
-            remaining_count = self.TARGET_URLS - len(available_domains)
-
-            new_domains = set()
-            page = 0
-            max_pages = self.MAX_PAGES
-
-            count_empty_page = 0
-            previous_page_empty = False  # Track if previous page was empty
-            
-            while len(new_domains) < remaining_count and page < max_pages:
-
-                # Add delay between requests
-                time.sleep(5)
-                
                 serp_html = self.search_client.search(search_keyword, page)
+                current_domains = extract_domains_from_raw_html(serp_html)
                 
-                # Extract domains from the page
-                current_page_domains = extract_domains_from_raw_html(serp_html)
-
-                # Series of Consecutive Empty Pages Check
-                current_page_empty = not bool(current_page_domains)
-                
-                if previous_page_empty and current_page_empty:
-                    count_empty_page += 1
-                    if count_empty_page >= 5: 
+                if not current_domains:
+                    consecutive_empty += 1
+                    if consecutive_empty >= 5:
                         break
-                elif not current_page_empty:
-                    count_empty_page = 0
-                
-                previous_page_empty = current_page_empty
-                
-                # Filter out domains that are either in used_domains or available_domains
-                domains_to_add = {
-                    domain for domain in current_page_domains 
-                    if domain not in used_domains and domain not in available_domains
+                else:
+                    consecutive_empty = 0
+                    
+                filtered = {
+                    d for d in current_domains 
+                    if d not in used_domains and d not in available_domains and d not in new_domains
                 }
+                new_domains.update(filtered)
                 
-                # Add new domains to the set
-                new_domains.update(domains_to_add)
-                
-                page += 1
-
-            # Add to dynamodb against the keyword
-            try:
-                self.domain_manager.add_domain_urls(search_keyword, new_domains)
             except Exception:
-                pass  # Ignore any errors and proceed
-
-            # Combine available and new domains
-            final_domains = list(available_domains.union(new_domains))
-
-            # Converting Domain List
-            result = convert_domain_list(final_domains)
-
-            # Return only the required number of domains
-            return result
+                consecutive_empty += 1
+                if consecutive_empty >= 5:
+                    break
             
-        except Exception as e:
+            page += 1
+        
+        return new_domains
+
+    def generate_urls(self, user_id: str, search_keyword: str) -> List[dict]:
+        try:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                future_used = executor.submit(self._fetch_used_domains, user_id)
+                future_existing = executor.submit(self._fetch_existing_domains, search_keyword)
+                
+                used_domains = future_used.result()
+                existing_domains = future_existing.result()
+            
+            available_domains = existing_domains - used_domains
+            remaining_count = settings.TARGET_URLS - len(available_domains)
+            
+            new_domains: Set[str] = set()
+            if remaining_count > 0:
+                # [LOG] Extracting from web - not enough in database
+                print(f"[SERP] Extracting {remaining_count} domains from web for: {search_keyword}")
+                
+                new_domains = self._fetch_serp_domains(
+                    search_keyword, remaining_count, used_domains, available_domains
+                )
+                
+                if new_domains:
+                    try:
+                        self.domain_manager.add_domain_urls(search_keyword, list(new_domains))
+                        # [LOG] Saved to database
+                        print(f"[DB] Saved {len(new_domains)} new domains to database")
+                    except Exception:
+                        pass
+            else:
+                # [LOG] Found sufficient domains in database
+                print(f"[DB] Found {len(available_domains)} domains in database - skipping web extraction")
+            
+            final_domains = list(available_domains | new_domains)[:settings.TARGET_URLS]
+            return convert_domain_list(final_domains)
+            
+        except Exception:
             return []
