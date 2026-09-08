@@ -17,6 +17,9 @@ class Settings:
     MAX_PAGES: int = 25
     REQUEST_TIMEOUT: int = 30
     SERP_DELAY: float = 5.0
+    RESULTS_PER_PAGE: int = 20
+    SERP_COUNTRY: str = os.getenv("SERP_COUNTRY", "nl")
+    SERP_LANGUAGE: str = os.getenv("SERP_LANGUAGE", "en")
 
 @lru_cache()
 def get_settings() -> Settings:

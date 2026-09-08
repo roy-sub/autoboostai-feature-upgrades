@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dynamoDB import DomainUrlManager
 from serpApi import GoogleSearchClient
 from usedDomainFetcher import DomainFetcher
-from extractUrl import extract_domains_from_raw_html, convert_domain_list
+from extractUrl import extract_domains_from_serp_json, convert_domain_list
 from config import settings
 
 class URLGenerator:
@@ -42,8 +42,8 @@ class URLGenerator:
                 time.sleep(settings.SERP_DELAY)
             
             try:
-                serp_html = self.search_client.search(search_keyword, page)
-                current_domains = extract_domains_from_raw_html(serp_html)
+                serp_data = self.search_client.search(search_keyword, page)
+                current_domains = extract_domains_from_serp_json(serp_data)
                 
                 if not current_domains:
                     consecutive_empty += 1
