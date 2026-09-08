@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dynamoDB import DomainUrlManager
 from serpApi import GoogleSearchClient
 from usedDomainFetcher import DomainFetcher
-from extractUrl import extract_domains_from_serp_json, convert_domain_list
+from extractUrl import extract_domains_from_serp_json, sanitize_domains, convert_domain_list
 from config import settings
 
 class URLGenerator:
@@ -22,9 +22,20 @@ class URLGenerator:
 
     def _fetch_existing_domains(self, search_keyword: str) -> Set[str]:
         try:
-            return set(self.domain_manager.get_domain_urls(search_keyword))
+            stored = self.domain_manager.get_domain_urls(search_keyword)
         except Exception:
             return set()
+        
+        # The cache is not trusted blindly: rows written by older versions
+        # can hold junk, and the exclude lists may have changed since.
+        clean = sanitize_domains(stored)
+        
+        dropped = len(stored) - len(clean)
+        if dropped > 0:
+            # [LOG] cached entries that no longer pass the rules
+            print(f"[DB] Ignored {dropped} invalid/excluded cached entries")
+        
+        return set(clean)
 
     def _fetch_serp_domains(
         self, 

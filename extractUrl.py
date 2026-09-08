@@ -51,6 +51,24 @@ def _clean_domain(raw: str) -> str:
 
     return f"{parsed.scheme}://{host}"
 
+def sanitize_domains(domains: List[str]) -> List[str]:
+    """Re-apply the domain rules to an existing list of urls.
+
+    Used on whatever comes back from DynamoDB. Rows written by older
+    versions can hold junk (e.g. "https://Ca. 210 Follower"), and the
+    exclude lists in constants.py may have changed since a row was saved,
+    so the cache is cleaned on the way out as well as on the way in.
+    """
+    cleaned = {}
+
+    for raw in domains or []:
+        base_url = _clean_domain(raw or '')
+        if base_url:
+            key = urlparse(base_url).hostname.removeprefix('www.')
+            cleaned.setdefault(key, base_url)
+
+    return list(cleaned.values())
+
 def extract_domains_from_serp_json(data: Any) -> List[str]:
     """Pull website domains out of BrightData's parsed SERP JSON.
 
