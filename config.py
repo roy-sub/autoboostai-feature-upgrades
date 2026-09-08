@@ -15,6 +15,7 @@ class Settings:
     N8N_WEBHOOK_BASE_URL: str = os.getenv("N8N_WEBHOOK_BASE_URL", "https://ws-ai.app.n8n.cloud/webhook")
     TARGET_URLS: int = 50
     MAX_PAGES: int = 25
+    MAX_PAGES_WITHOUT_NEW: int = 3
     REQUEST_TIMEOUT: int = 30
     SERP_DELAY: float = 5.0
     RESULTS_PER_PAGE: int = 20

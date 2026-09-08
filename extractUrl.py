@@ -1,8 +1,18 @@
 import json
+import re
 from typing import Any, Dict, List
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 from constants import EXCLUDE_WORDS, EXCLUDE_DOMAINS
+
+# A real hostname: dot-separated labels ending in a 2+ letter TLD.
+# Rejects the junk Google puts in display_link for video / social results,
+# e.g. "Ca. 210 Follower" or "Ca. 390 Aufrufe - vor 10 Jahren".
+_HOSTNAME_RE = re.compile(
+    r'^(?=.{1,253}$)'
+    r'(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+'
+    r'[a-z]{2,63}$'
+)
 
 def _clean_domain(raw: str) -> str:
     """Turn a display_link into a plain 'https://host' base url, or ''.
@@ -27,10 +37,11 @@ def _clean_domain(raw: str) -> str:
     except Exception:
         return ''
 
-    if not parsed.netloc or parsed.netloc == '.com':
+    host = (parsed.hostname or '').lower().strip('.')
+    if not host or not _HOSTNAME_RE.match(host):
         return ''
 
-    check_domain = parsed.netloc.lower().removeprefix('www.')
+    check_domain = host.removeprefix('www.')
 
     if any(word in check_domain for word in EXCLUDE_WORDS):
         return ''
@@ -38,7 +49,7 @@ def _clean_domain(raw: str) -> str:
     if check_domain in EXCLUDE_DOMAINS:
         return ''
 
-    return f"{parsed.scheme}://{parsed.netloc}".rstrip('/')
+    return f"{parsed.scheme}://{host}"
 
 def extract_domains_from_serp_json(data: Any) -> List[str]:
     """Pull website domains out of BrightData's parsed SERP JSON.
@@ -58,16 +69,18 @@ def extract_domains_from_serp_json(data: Any) -> List[str]:
     if not isinstance(data, dict):
         return []
 
-    domains = set()
+    domains = {}
 
     for item in data.get('organic') or []:
         if not isinstance(item, dict):
             continue
         base_url = _clean_domain(item.get('display_link') or '')
         if base_url:
-            domains.add(base_url)
+            # key on the www-less host so x.com and www.x.com count once
+            key = urlparse(base_url).hostname.removeprefix('www.')
+            domains.setdefault(key, base_url)
 
-    return list(domains)
+    return list(domains.values())
 
 def extract_domains_from_raw_html(html: str) -> List[str]:
     """Legacy HTML scraper.

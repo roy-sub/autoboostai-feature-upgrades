@@ -36,6 +36,7 @@ class URLGenerator:
         new_domains: Set[str] = set()
         page = 0
         consecutive_empty = 0
+        consecutive_no_new = 0
         
         while len(new_domains) < remaining_count and page < settings.MAX_PAGES:
             if page > 0:
@@ -58,12 +59,26 @@ class URLGenerator:
                 }
                 new_domains.update(filtered)
                 
+                # Google has run out of fresh results - stop paging instead
+                # of burning SERP_DELAY on pages that just repeat themselves.
+                if filtered:
+                    consecutive_no_new = 0
+                else:
+                    consecutive_no_new += 1
+                    if consecutive_no_new >= settings.MAX_PAGES_WITHOUT_NEW:
+                        break
+                
             except Exception:
                 consecutive_empty += 1
                 if consecutive_empty >= 5:
                     break
             
             page += 1
+        
+        if len(new_domains) < remaining_count:
+            # [LOG] Google simply did not have this many distinct sites
+            print(f"[SERP] Exhausted results at page {page}: found "
+                  f"{len(new_domains)} of {remaining_count} requested")
         
         return new_domains
 
